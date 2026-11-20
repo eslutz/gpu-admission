@@ -103,8 +103,11 @@ AMD and Intel admission requires real hardware qualification. See [GPU qualifica
 
 ## Releases
 
-- GitHub Actions builds the app, installer, and checksum as workflow artifacts.
-- A GitHub Release needs the repository owner’s explicit approval. Approved releases are marked **prerelease**.
+1. Set `<Version>` in [the app project](src/GpuAdmissionTray.csproj), for example `0.2.0-preview.1`. The .NET build stamps the app with this version, and the installer uses the same value.
+2. Merge the version change into `main` and wait for **Windows installer** CI to pass. CI saves the installer, matching source ZIP, checksums, and build details.
+3. In **Actions → Publish prerelease → Run workflow**, select `main`. Run with **publish** unchecked to verify the release inputs. Check **publish** only when you approve publication. The workflow creates the matching `v` tag and publishes the installer and corresponding source together as a prerelease.
+
+A version can be published once. Increase the version in the app project for the next prerelease. The current build is unsigned. Smart App Control may block it.
 
 ## License
 

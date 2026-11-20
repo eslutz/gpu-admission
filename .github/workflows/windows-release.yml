@@ -3,7 +3,6 @@ name: Windows installer
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -93,8 +92,7 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0-dev' }
-          & ./installer/Build-Installer.ps1 -PublishDirectory out -Destination dist -Version $version
+          & ./installer/Build-Installer.ps1 -PublishDirectory out -Destination dist
       - name: Smoke-test per-user installer
         shell: pwsh
         run: |
@@ -107,12 +105,25 @@ jobs:
           $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'GPU Admission.lnk'
           if (!(Test-Path $app) -or !(Test-Path $shortcut)) { throw 'App or Start menu shortcut is missing' }
           if (!(Test-Path (Join-Path $install 'LICENSE'))) { throw 'GPL license is missing' }
+          $project = [xml](Get-Content src/GpuAdmissionTray.csproj -Raw)
+          $version = $project.Project.PropertyGroup.Version
+          if (((Get-Item $app).VersionInfo.ProductVersion -split '\+')[0] -cne $version) { throw 'Installed app version does not match the project' }
+          $notices = @(Get-ChildItem (Join-Path $install 'licenses') -Recurse -File)
+          if ($notices.Count -lt 3) { throw 'Runtime license notices are missing' }
           if (!(Test-Path (Join-Path $install 'integrations/gpu_admission_client.py'))) { throw 'The worker client is missing' }
           $probe = Start-Process $app -Wait -PassThru -WindowStyle Hidden -ArgumentList '--probe-worker INVALID-ID'
           if ($probe.ExitCode -ne 2) { throw 'Installed launcher did not load its runtime' }
       - name: Archive corresponding project source
         shell: pwsh
-        run: git archive --format=zip --prefix=gpu-admission/ --output=dist/GPU-Admission-Source.zip HEAD
+        run: |
+          git archive --format=zip --prefix=gpu-admission/ --output=dist/GPU-Admission-Source.zip HEAD
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $source = Get-FileHash dist/GPU-Admission-Source.zip -Algorithm SHA256
+          $checksums = (Get-Content dist/SHA256SUMS.txt -Raw).TrimEnd() + "`n$($source.Hash.ToLowerInvariant())  GPU-Admission-Source.zip`n"
+          Set-Content dist/SHA256SUMS.txt -Value $checksums -Encoding ascii -NoNewline
+          $project = [xml](Get-Content src/GpuAdmissionTray.csproj -Raw)
+          $build = "version=$($project.Project.PropertyGroup.Version)`ncommit=$(git rev-parse HEAD)`n"
+          Set-Content dist/BUILD.txt -Value $build -Encoding ascii -NoNewline
       - uses: actions/upload-artifact@v7
         with:
           name: gpu-admission-windows-x64
@@ -120,4 +131,5 @@ jobs:
             dist/GPU-Admission-Setup-x64.exe
             dist/SHA256SUMS.txt
             dist/GPU-Admission-Source.zip
+            dist/BUILD.txt
           if-no-files-found: error
