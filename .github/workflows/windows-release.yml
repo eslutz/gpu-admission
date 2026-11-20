@@ -66,10 +66,16 @@ jobs:
           )
           $scripts = git ls-files -- '*.ps1' '*.psm1'
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
           $issues = foreach ($script in $scripts) {
-            Invoke-ScriptAnalyzer -Path $script | Where-Object {
-              $_.Severity -in 'Error', 'ParseError' -or $_.RuleName -in $securityRules
+            $parseErrors = $null
+            $path = (Resolve-Path -LiteralPath $script).Path
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors) {
+              $parseErrors | Format-List
+              throw "PowerShell syntax check failed for $script"
             }
+            Invoke-ScriptAnalyzer -Path $path -IncludeRule $securityRules
           }
           if ($issues) {
             $issues | Format-Table ScriptName,Line,RuleName,Message -Wrap
