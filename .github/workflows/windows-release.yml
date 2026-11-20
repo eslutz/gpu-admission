@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Lint Python
+      - name: Lint Python with Flake8
         run: |
-          python3 -m pip install ruff==0.15.5
-          python3 -m ruff check integrations tests
+          python3 -m pip install flake8==7.3.0
+          python3 -m flake8 --select E4,E7,E9,F integrations tests
       - name: Verify Linux worker protocol
         run: PYTHONPATH=integrations python3 -B -m unittest discover -s tests -p test_client.py -v
 
