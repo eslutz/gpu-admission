@@ -24,6 +24,29 @@ sealed class ChildLifetime : IDisposable
         if (!AssignProcessToJobObject(job, process.SafeHandle)) throw new Win32Exception();
     }
 
+    public SafeFileHandle Handle => job;
+
+    public uint ActiveCount
+    {
+        get
+        {
+            if (!QueryInformationJobObject(job, 1, out var accounting, (uint)Marshal.SizeOf<Accounting>(), IntPtr.Zero))
+                throw new Win32Exception();
+            return accounting.ActiveProcesses;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct Accounting
+    {
+        public long TotalUser, TotalKernel, PeriodUser, PeriodKernel;
+        public uint PageFaults, TotalProcesses, ActiveProcesses, TerminatedProcesses;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static extern bool QueryInformationJobObject(SafeFileHandle job, int kind, out Accounting info, uint size, IntPtr returned);
+
     public void Dispose() => job.Dispose();
 
     [StructLayout(LayoutKind.Sequential)]

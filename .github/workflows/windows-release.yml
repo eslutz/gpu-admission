@@ -11,38 +11,113 @@ permissions:
   contents: read
 
 jobs:
+  linux-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint Python with Flake8
+        run: |
+          python3 -m pip install flake8==7.3.0
+          python3 -m flake8 --select E4,E7,E9,F integrations tests
+      - name: Verify Linux worker protocol
+        run: PYTHONPATH=integrations python3 -B -m unittest discover -s tests -p test_client.py -v
+
+  vendor-probe:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: GPUOpen-LibrariesAndSDKs/ADLX
+          ref: 32b5a740d42295c5dfe9026b9f52683da0f3af91
+          path: sdk/adlx
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: intel/drivers.gpu.control-library
+          ref: 1db55c364b15649427a71a05d950ab9c1eaf9a07
+          path: sdk/igcl
+          persist-credentials: false
+      - name: Compile the qualification probe
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'MSVC x64 tools are required' }
+          & "$vs/Common7/Tools/Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          & ./native/Build-VendorProbe.ps1 -AdlxSdk sdk/adlx -IgclSdk sdk/igcl -Destination "$env:RUNNER_TEMP/gpu-probe"
+
   build:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - name: Test guard and publish Windows x64 app
+      - name: Lint PowerShell
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -Repository PSGallery
+          $securityRules = @(
+            'PSAvoidUsingInvokeExpression',
+            'PSAvoidUsingConvertToSecureStringWithPlainText',
+            'PSAvoidUsingPlainTextForPassword',
+            'PSAvoidUsingUsernameAndPasswordParams'
+          )
+          $scripts = git ls-files -- '*.ps1' '*.psm1'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+          $issues = foreach ($script in $scripts) {
+            $parseErrors = $null
+            $path = (Resolve-Path -LiteralPath $script).Path
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors) {
+              $parseErrors | Format-List
+              throw "PowerShell syntax check failed for $script"
+            }
+            Invoke-ScriptAnalyzer -Path $path -IncludeRule $securityRules
+          }
+          if ($issues) {
+            $issues | Format-Table ScriptName,Line,RuleName,Message -Wrap
+            throw 'PowerShell lint failed'
+          }
+      - name: Analyze, test and publish Windows x64 app
         shell: pwsh
         run: |
           & ./src/Test-GuardLifecycle.ps1
-          dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained true -o out
+          dotnet build tests/WindowsChecks.csproj -c Release -warnaserror -p:NuGetAudit=true -p:NuGetAuditMode=all
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet run --project tests/WindowsChecks.csproj -c Release --no-build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained true -o out -warnaserror -p:NuGetAudit=true -p:NuGetAuditMode=all
       - name: Build installer
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (!(Test-Path $compiler)) {
-            choco install innosetup -y --no-progress
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          }
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0-dev' }
-          & $compiler "/DAppVersion=$version" installer/GpuAdmission.iss
-      - name: Write installer checksum
+          & ./installer/Build-Installer.ps1 -PublishDirectory out -Destination dist -Version $version
+      - name: Smoke-test per-user installer
         shell: pwsh
         run: |
-          $hash = (Get-FileHash dist/GPU-Admission-Setup-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  GPU-Admission-Setup-x64.exe" | Set-Content dist/SHA256SUMS.txt -Encoding ascii
-      - uses: actions/upload-artifact@v4
+          $install = Join-Path $env:RUNNER_TEMP 'gpu-admission-install'
+          $setup = Start-Process dist/GPU-Admission-Setup-x64.exe -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
+            '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $install + '"')
+          )
+          if ($setup.ExitCode) { throw "Installer exited $($setup.ExitCode)" }
+          $app = Join-Path $install 'GpuAdmissionTray.exe'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'GPU Admission.lnk'
+          if (!(Test-Path $app) -or !(Test-Path $shortcut)) { throw 'App or Start menu shortcut is missing' }
+          if (!(Test-Path (Join-Path $install 'LICENSE'))) { throw 'GPL license is missing' }
+          if (!(Test-Path (Join-Path $install 'integrations/gpu_admission_client.py'))) { throw 'The worker client is missing' }
+          $probe = Start-Process $app -Wait -PassThru -WindowStyle Hidden -ArgumentList '--probe-worker INVALID-ID'
+          if ($probe.ExitCode -ne 2) { throw 'Installed launcher did not load its runtime' }
+      - name: Archive corresponding project source
+        shell: pwsh
+        run: git archive --format=zip --prefix=gpu-admission/ --output=dist/GPU-Admission-Source.zip HEAD
+      - uses: actions/upload-artifact@v7
         with:
           name: gpu-admission-windows-x64
           path: |
             dist/GPU-Admission-Setup-x64.exe
             dist/SHA256SUMS.txt
+            dist/GPU-Admission-Source.zip
           if-no-files-found: error

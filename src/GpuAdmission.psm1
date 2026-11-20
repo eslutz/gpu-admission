@@ -1,12 +1,12 @@
 # Pure policy; no process, filesystem or network access.
-function New-GpuAdmissionState($Gpu) {
-    return @{schema='home-network-gpu-admission/v1';generation=[guid]::NewGuid().ToString('N');gpu=$Gpu;owner=$null;held=$true;low_since=$null;high_samples=0;pending=@{};last_sample=$null}
+function New-GpuAdmissionState($Gpu,$Schema='home-network-gpu-admission/v1') {
+    return @{schema=$Schema;generation=[guid]::NewGuid().ToString('N');gpu=$Gpu;owner=$null;held=$true;low_since=$null;high_samples=0;pending=@{};last_sample=$null}
 }
 function Test-GpuNumber($Value) {
     return ($Value -is [ValueType] -and $Value -isnot [bool] -and ![double]::IsNaN([double]$Value) -and ![double]::IsInfinity([double]$Value))
 }
 function Test-GpuRequest($R,$State,$Consumer,$Now) {
-    return ($R -is [hashtable] -and $R.schema -ceq 'home-network-gpu-admission/v1' -and $R.consumer -ceq $Consumer -and
+    return ($R -is [hashtable] -and $R.schema -ceq $State.schema -and $R.consumer -ceq $Consumer -and
         $R.request_id -cmatch '^[0-9a-f]{32}$' -and $R.generation -ceq $State.generation -and $R.gpu -ceq $State.gpu -and
         $R.state -cin @('requested','active','released') -and (Test-GpuNumber $R.observed_at) -and
         (Test-GpuNumber $R.heartbeat_at) -and $Now-$R.observed_at -ge 0 -and ($Now-$R.observed_at -le 15 -or $R.state -ceq 'released') -and

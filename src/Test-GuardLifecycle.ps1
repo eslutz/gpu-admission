@@ -3,6 +3,7 @@ $root=Join-Path ([IO.Path]::GetTempPath()) ('gpu-admission-test-'+[guid]::NewGui
 $run=[guid]::NewGuid().ToString('N')
 $generation=[guid]::NewGuid().ToString('N')
 $gpu='GPU-00000000-0000-0000-0000-000000000000'
+$container='a'*64
 $quit=Join-Path $root "quit-$run"
 $child=$null
 function Record($name,$data){
@@ -30,7 +31,7 @@ try {
     }
     Record 'config.json' @{root=$root;gpu=$gpu;consumers=$consumers}
     Record 'modes.json' @{policy_mode='Hold';consumer_modes=@{tdarr='Auto';'telecom-transcription'='Auto'}}
-    $owner=@{consumer='tdarr';request_id=[guid]::NewGuid().ToString('N');phase='active';generation=$generation;gpu=$gpu}
+    $owner=@{consumer='tdarr';request_id=[guid]::NewGuid().ToString('N');phase='active';generation=$generation;gpu=$gpu;docker_container_id=$container}
     Record 'owner.json' @{schema='home-network-gpu-admission/v1';gpu=$gpu;generation=$generation;owner=$owner;pending=@{};last_sample=$null}
     $old=Join-Path $root 'logs/events-20200101T000000000Z-00000000000000000000000000000000.jsonl'
     [IO.File]::WriteAllText($old,'expired')
@@ -42,7 +43,8 @@ param($Guard,$Config,$Run,$Marker)
 function nvidia-smi {$global:LASTEXITCODE=1}
 function docker {
     $global:LASTEXITCODE=0
-    if(Test-Path -LiteralPath $Marker){'exited'}else{'running'}
+    if(Test-Path -LiteralPath $Marker){ ('a'*64)+' exited' }
+    else { ('b'*64)+' exited' } # A replacement returned by inspection is never stop evidence.
 }
 & $Guard -Config $Config -TrayRun $Run
 '@
@@ -75,7 +77,7 @@ function docker {
     if(!(Test-Path -LiteralPath (Join-Path $root 'logs/do-not-delete.txt'))){throw 'Unmanaged file removed'}
     $events=Get-Content -LiteralPath (Join-Path $root 'logs/events.jsonl') | ForEach-Object {$_ | ConvertFrom-Json}
     if($events[0].event -ne 'gpu.admission.start' -or $events[-1].event -ne 'gpu.admission.stop'){throw 'Lifecycle log missing'}
-    Write-Output 'PASS: retained uncertain ownership, cancelled quit, clean quit, lifecycle log, archive retention'
+    Write-Output 'PASS: retained uncertain ownership after Docker replacement, cancelled quit, clean quit, lifecycle log, archive retention'
 } finally {
     if($child){if(!$child.HasExited){$child.Kill();$child.WaitForExit()};$child.Dispose()}
     $base=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
