@@ -13,7 +13,8 @@ sealed class StatusWindow : AppWindow
     readonly Dictionary<AppearanceMode, ChoiceButton> appearanceOptions = [];
     readonly Label appearanceLabel, state, reason;
     readonly StatusBadge badge = new() { Size = new Size(32, 32), Anchor = AnchorStyles.Left };
-    readonly ReadingRows gpu = new(3), workerSummary = new(4, rightAlign: true), diagnosticRows = new(5);
+    readonly ReadingRows gpu = new(3), diagnosticRows = new(5);
+    readonly ReadingRows workerSummary = new(4, rightAlign: true) { Name = "WorkerSummary" };
     readonly UiButton admission, repair, quit, cancel, diagnosticsButton;
     readonly ToolTip details = new();
     readonly CheckBox startup;
@@ -336,24 +337,38 @@ sealed class StatusWindow : AppWindow
             values = new Label[capacity];
             for (int i = 0; i < capacity; i++)
             {
-                RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
-                names[i] = TextLabel("", UiStyle.Body);
-                names[i].AutoEllipsis = true;
-                values[i] = TextLabel("", UiStyle.Body);
-                values[i].AutoEllipsis = true;
+                RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                names[i] = ReadingLabel();
+                values[i] = ReadingLabel();
                 if (rightAlign) values[i].TextAlign = ContentAlignment.MiddleRight;
                 Controls.Add(names[i], 0, i);
                 Controls.Add(values[i], 1, i);
             }
         }
 
+        static Label ReadingLabel()
+        {
+            var label = TextLabel("", UiStyle.Body);
+            label.AutoEllipsis = true;
+            label.MinimumSize = new Size(0, 35);
+            label.Visible = false;
+            return label;
+        }
+
         public void SetReadings(IReadOnlyList<Reading> rows)
         {
+            SuspendLayout();
             for (int i = 0; i < names.Length; i++)
             {
-                names[i].Text = i < rows.Count ? rows[i].Label : "";
-                values[i].Text = i < rows.Count ? rows[i].Value : "";
+                bool hasReading = i < rows.Count;
+                if (hasReading)
+                {
+                    names[i].Text = rows[i].Label;
+                    values[i].Text = rows[i].Value;
+                }
+                names[i].Visible = values[i].Visible = hasReading;
             }
+            ResumeLayout();
         }
 
         public void MuteValues(Palette colors)

@@ -96,6 +96,8 @@ static class AppearanceChecks
         Application.DoEvents();
         T Find<T>(string name) where T : Control => window.Controls.Find(name, true).OfType<T>().Single();
         Capture(window, Path.Combine(output, "dark.png"));
+        Require(!Find<TableLayoutPanel>("WorkerSummary").VerticalScroll.Visible,
+            "The two-worker overview must fit without scrolling.");
         var admission = Find<UiButton>("AdmissionAction");
         Require(!admission.Enabled && admission.Text == "Resume", "Resume must stay disabled without telemetry.");
         admission.PerformClick();
@@ -107,8 +109,11 @@ static class AppearanceChecks
         Require(Find<CheckBox>("StartAtSignIn").Visible, "Diagnostics must expose the sign-in preference.");
         Capture(window, Path.Combine(output, "diagnostics.png"));
         Find<RadioButton>("WorkersTab").Checked = true;
-        Require(Find<ListView>("WorkerList").Visible && !Find<CheckBox>("StartAtSignIn").Visible,
+        var workerList = Find<ListView>("WorkerList");
+        Require(workerList.Visible && !Find<CheckBox>("StartAtSignIn").Visible,
             "Worker navigation must leave Diagnostics.");
+        Require(workerList.Columns[0].Width >= TextRenderer.MeasureText("telecom-transcription", workerList.Font).Width + 8,
+            "The registered telecom worker ID must fit in the Worker column.");
         Capture(window, Path.Combine(output, "workers.png"));
         Find<RadioButton>("OverviewTab").Checked = true;
         Find<RadioButton>("LightAppearance").Checked = true;

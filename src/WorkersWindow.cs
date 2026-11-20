@@ -6,7 +6,7 @@ sealed class WorkersPanel : UserControl
     readonly string root;
     readonly Appearance theme;
     readonly ListView list = new() { Name = "WorkerList", AccessibleName = "Workers", Dock = DockStyle.Fill,
-        View = View.Details, FullRowSelect = true, MultiSelect = false };
+        View = View.Details, FullRowSelect = true, MultiSelect = false, ShowItemToolTips = true };
     readonly Label details = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(5) };
     readonly System.Windows.Forms.Timer timer = new() { Interval = 2000 };
     readonly Func<JsonObject?> liveDiagnostics;
@@ -21,7 +21,7 @@ sealed class WorkersPanel : UserControl
         liveDiagnostics = diagnostics;
         Dock = DockStyle.Fill;
         Padding = new Padding(22, 18, 22, 0);
-        foreach (var (title, width) in new[] { ("Worker", 146), ("Type", 78), ("Policy", 64), ("Activity", 156), ("Last seen", 126) })
+        foreach (var (title, width) in new[] { ("Worker", 176), ("Type", 78), ("Policy", 64), ("Activity", 156), ("Last seen", 126) })
             list.Columns.Add(title, width);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
         Add("Add worker", () =>
@@ -156,7 +156,7 @@ sealed class WorkersPanel : UserControl
                 unix is >= 0 and < 253402300799
                 ? DateTimeOffset.FromUnixTimeSeconds((long)unix).ToLocalTime().ToString("g") : "—";
             var item = new ListViewItem(new[] { id, AdmissionFiles.Value(pair.Value, "kind") == "windows" ? "Windows" : "Docker",
-                AdmissionFiles.Value(modes, id) == "Auto" ? "Auto" : "Hold", activity, time });
+                AdmissionFiles.Value(modes, id) == "Auto" ? "Auto" : "Hold", activity, time }) { ToolTipText = id };
             list.Items.Add(item);
             if (id == selected) item.Selected = true;
         }
