@@ -27,11 +27,17 @@ flowchart LR
 - **Quit** waits for the current worker to release the GPU, then closes the app.
 - **Open logs** opens the event history. Logs rotate daily or at 1 MiB and are kept for up to 30 days, with a 20 MiB total cap.
 
-## Build on Windows
+## Requirements to run
 
-- **Build:** .NET 10 SDK.
-- **Run:** .NET 10 Windows Desktop Runtime, Windows PowerShell, NVIDIA's `nvidia-smi`, and Windows GPU Engine counters.
-- **Docker:** The guard uses the Docker CLI to confirm when a configured worker container has stopped.
+- **Windows** with the **.NET 10 Windows Desktop Runtime** and **Windows PowerShell**.
+- **An NVIDIA GPU** with a driver that provides `nvidia-smi`. The app uses it to identify the GPU and read free video memory. AMD and Intel GPUs are currently unsupported.
+- **Windows GPU Engine performance counters** for the configured NVIDIA adapter. If either telemetry source is unavailable, admission stays on hold.
+- **Docker CLI and access to a running Docker engine** for checking the configured worker containers.
+- **A compatible worker** that requests a GPU grant before starting work. See [Worker compatibility](#worker-compatibility).
+
+## Build from source
+
+Install the **.NET 10 SDK** on Windows to build and run the checks.
 
 ```powershell
 dotnet publish src/GpuAdmissionTray.csproj -c Release --self-contained false -o out
