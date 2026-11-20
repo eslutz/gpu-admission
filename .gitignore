@@ -7,3 +7,4 @@ modes.json
 *.jsonl
 *.user
 dist/
+__pycache__/

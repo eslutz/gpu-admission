@@ -11,6 +11,63 @@ permissions:
   contents: read
 
 jobs:
+  linux-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Linux worker protocol
+        run: PYTHONPATH=integrations python3 -B -m unittest discover -s tests -p test_client.py -v
+
+  vendor-probe:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: GPUOpen-LibrariesAndSDKs/ADLX
+          ref: 32b5a740d42295c5dfe9026b9f52683da0f3af91
+          path: sdk/adlx
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: intel/drivers.gpu.control-library
+          ref: 1db55c364b15649427a71a05d950ab9c1eaf9a07
+          path: sdk/igcl
+          persist-credentials: false
+      - name: Compile the qualification probe
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$vs) { throw 'MSVC x64 tools are required' }
+          & "$vs/Common7/Tools/Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          & ./native/Build-VendorProbe.ps1 -AdlxSdk sdk/adlx -IgclSdk sdk/igcl -Destination "$env:RUNNER_TEMP/gpu-probe"
+
+  ui-preview:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Render and exercise the native tray UI
+        shell: pwsh
+        run: |
+          $checks = Join-Path $env:RUNNER_TEMP 'gpu-admission-ui'
+          dotnet publish tests/WindowsChecks.csproj -c Release -r win-x64 --self-contained true -o $checks
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & (Join-Path $checks 'WindowsChecks.exe') appearance-contract (Join-Path $checks 'appearance-fixture')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & (Join-Path $checks 'WindowsChecks.exe') ui-preview (Join-Path $PWD 'dist/ui-preview') (Join-Path $PWD 'assets/GpuAdmission.ico')
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gpu-admission-ui-preview
+          path: dist/ui-preview/*.png
+          if-no-files-found: warn
+
   build:
     runs-on: windows-2025
     steps:
@@ -22,23 +79,28 @@ jobs:
         shell: pwsh
         run: |
           & ./src/Test-GuardLifecycle.ps1
+          dotnet run --project tests/WindowsChecks.csproj -c Release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained true -o out
       - name: Build installer
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-          if (!(Test-Path $compiler)) {
-            choco install innosetup -y --no-progress
-            if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          }
           $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0-dev' }
-          & $compiler "/DAppVersion=$version" installer/GpuAdmission.iss
-      - name: Write installer checksum
+          & ./installer/Build-Installer.ps1 -PublishDirectory out -Destination dist -Version $version
+      - name: Smoke-test per-user installer
         shell: pwsh
         run: |
-          $hash = (Get-FileHash dist/GPU-Admission-Setup-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  GPU-Admission-Setup-x64.exe" | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          $install = Join-Path $env:RUNNER_TEMP 'gpu-admission-install'
+          $setup = Start-Process dist/GPU-Admission-Setup-x64.exe -Wait -PassThru -WindowStyle Hidden -ArgumentList @(
+            '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',('/DIR="' + $install + '"')
+          )
+          if ($setup.ExitCode) { throw "Installer exited $($setup.ExitCode)" }
+          $app = Join-Path $install 'GpuAdmissionTray.exe'
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'GPU Admission.lnk'
+          if (!(Test-Path $app) -or !(Test-Path $shortcut)) { throw 'App or Start menu shortcut is missing' }
+          if (!(Test-Path (Join-Path $install 'integrations/gpu_admission_client.py'))) { throw 'The worker client is missing' }
+          $probe = Start-Process $app -Wait -PassThru -WindowStyle Hidden -ArgumentList '--probe-worker INVALID-ID'
+          if ($probe.ExitCode -ne 2) { throw 'Installed launcher did not load its runtime' }
       - uses: actions/upload-artifact@v4
         with:
           name: gpu-admission-windows-x64

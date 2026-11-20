@@ -2,15 +2,15 @@
 
 <img src="assets/GpuAdmission.png" alt="GPU Admission chip and lightning icon" width="64" />
 
-**Let background jobs share your GPU without getting in the way of what you're doing.**
+**Keep background GPU jobs from getting in the way of what you’re doing.**
 
 ## Why it exists
 
-This started on a gaming PC that also ran Tdarr video transcodes and voicemail transcription. Both jobs could try to use the same GPU, even while someone was gaming.
+This started on a gaming PC that also ran Tdarr transcodes and voicemail transcription. Both jobs could try to use the GPU while someone was gaming.
 
-- **Keep the PC responsive.** New background work waits when the GPU is busy or telemetry is unavailable.
-- **Avoid overlap.** One participating worker gets permission at a time.
-- **Finish in-flight work.** You can hold new jobs without interrupting the current one.
+- **Keep the PC responsive.** New background jobs wait when the GPU is busy or readings are unavailable.
+- **Give each job a turn.** One participating worker receives a grant at a time.
+- **Let jobs finish.** Pause or quit without interrupting an admitted workload.
 
 ```mermaid
 flowchart LR
@@ -20,95 +20,88 @@ flowchart LR
     G -->|"One grant at a time"| W["Background job runs"]
 ```
 
-## What you can do from the tray
+## Install
 
-- **Status** shows GPU readings, workload modes, and CPU and memory usage.
-- **Pause / Resume** controls whether new jobs can start. Resume still follows GPU availability and each worker's settings.
-- **Quit** waits for the current worker to release the GPU, then closes the app.
-- **Open logs** opens the event history. Logs rotate daily or at 1 MiB and are kept for up to 30 days, with a 20 MiB total cap.
+**You need**
 
-## Requirements to run
+- Windows 11 x64, or an x64 Windows 10 edition supported by .NET 10 with DXCore. [Supported .NET 10 operating systems](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md)
+- A supported NVIDIA GPU for admission, with `nvidia-smi` and working Windows GPU Engine performance counters.
+- Docker Desktop and access to the local Linux engine if you plan to connect a Docker worker. A native Windows worker runs without Docker.
 
-- **64-bit Windows** with **Windows PowerShell**. The installer includes the .NET runtime.
-- **An NVIDIA GPU** with a driver that provides `nvidia-smi`. The app uses it to identify the GPU and read free video memory. AMD and Intel GPUs are currently unsupported.
-- **Windows GPU Engine performance counters** for the configured NVIDIA adapter. If either telemetry source is unavailable, admission stays on hold.
-- **Docker CLI and access to a running Docker engine** for checking the configured worker containers.
-- **A compatible worker** that requests a GPU grant before starting work. See [Worker compatibility](#worker-compatibility).
+**Download the installer**
 
-## Install on Windows
+1. Open [Releases](https://github.com/eslutz/gpu-admission/releases), then download **GPU-Admission-Setup-x64.exe**.
+2. Run the installer and select **Open GPU Admission setup** on the final screen. It installs for your account, includes the .NET runtime, and adds a Start menu shortcut.
+3. Follow the setup steps below with a build that includes the wizard. Older prereleases have the instructions that match their features in their tagged README.
 
-Choose either path. Both use the same setup steps below.
+**Build it yourself**
 
-| Install from a release | Build it yourself |
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and select the **.NET Desktop Runtime** if it is missing.
+2. Clone this repository and run the following in the repo folder. Keep the entire `out` folder together and open **GpuAdmissionTray.exe**.
+
+```powershell
+dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained false -o out
+```
+
+## Set up the app
+
+1. Pick the GPU you want to share, then select **Verify readings**. If a counter is missing, wake the adapter with a small workload and retry.
+2. Select **Save in Hold**. The app creates the settings and stays paused while you connect workers.
+3. Optional. Open **Diagnostics** and check **Start GPU Admission when I sign in**. If the app is already started by a scheduled task, keep using that task or switch to the checkbox.
+
+The state lives under `%LOCALAPPDATA%\GpuAdmission` by default. When upgrading, use **Quit** and let the current job finish before opening the new version. Keep the same state folder. For an existing custom install, keep its `root.txt` beside the executable. It contains the absolute path to that folder.
+
+Use **Repair GPU setup** in the tray menu if an existing profile loses its readings after a restart or driver update. The app verifies the same GPU and waits for Hold and ownership to clear before saving the updated adapter binding.
+
+## Connect a worker
+
+Open **Workers → Add worker**. Choose an ID such as `video-worker` and save it in **Hold**. Every worker needs its own ID and request folder.
+
+### Windows executable
+
+1. Select an executable that performs a finite job in its own process tree. Enter one argument per line.
+2. Select the worker, then **Test Windows**. This checks the connection while admission is held. It reads status and writes a presence record.
+3. Use **Connection details** to copy the launcher command into your script or scheduled task. Use that command each time you would otherwise launch the job.
+4. Select **Enable worker**, then use **Resume** on **Overview**. Try a small job before scheduling regular work.
+
+The launcher waits for a grant, starts the executable inside a Windows Job Object, and releases after the whole process tree exits. Run it under the same Windows account as the tray. The launcher is for native executables. Jobs delegated to an existing process, a Windows service, or WSL2 need a different integration.
+
+### Docker container
+
+1. Select the local container that will actually launch the GPU process.
+2. Under **Connection details**, copy the two Compose bind mounts. Add them to the service and apply the change. The shared status mount stays read-only, and this worker can write to its own request folder.
+3. Include the [Linux reference client](integrations/gpu_admission_client.py) in the container. In your worker, use its lease around every GPU job. Follow the [worker integration guide](integrations/README.md) for the lifecycle and an example. Keep a single in-flight job per worker.
+4. Run the connection command shown under **Connection details** from inside the container. The worker will briefly show **Connected / idle**.
+5. Select **Enable worker**, then use **Resume**. Confirm a small job moves from waiting to granted to running and releases after exit.
+
+Existing v1 workers can keep their current worker IDs, mounts, and integration. The protocol still uses a 15-second freshness window.
+
+## What you’ll see
+
+**Overview** shows why work is paused, the GPU readings, and each worker’s mode. Use **Appearance** to choose Light, Dark, or System. System follows the Windows app theme. **Diagnostics** has process usage, the last GPU sample, and startup settings.
+
+| Worker state | Meaning |
 | --- | --- |
-| Open [Releases](https://github.com/eslutz/gpu-admission/releases). Download and run **GPU-Admission-Setup-x64.exe** from a tagged release. It installs for your Windows account, adds a Start menu shortcut, and includes the .NET runtime. | Install the **.NET 10 SDK** and the **.NET 10 Windows Desktop Runtime**. Clone the repo and run the command below from the repo folder. Keep the entire `out` folder together in a permanent location. |
+| Registered | The worker is configured. Recent presence hasn’t been confirmed. |
+| Connected / idle | A recent heartbeat confirms communication. |
+| Waiting | The worker has an outstanding request. |
+| Granted | The guard reserved or granted the GPU. |
+| Running | The worker confirmed that it started the granted job. |
+| Recovery required | Ownership is retained until the guard can confirm the job ended. |
 
-```powershell
-dotnet publish src/GpuAdmissionTray.csproj -c Release --self-contained false -o out
-```
+**Pause** holds new work. **Resume** follows the GPU checks and each worker’s policy. **Quit** drains current ownership before closing. Use **Open current log** or **Open log folder** from the tray menu for event history. Logs rotate daily or at 1 MiB, with 30 days of retention and a 20 MiB total cap.
 
-Before upgrading, use **Quit** and let running work finish. Keep your existing state directory.
+## GPU support
 
-## First run
+| GPU | What this build can do |
+| --- | --- |
+| NVIDIA | Admission when the driver UUID, free memory, and Windows engine readings match the selected adapter. |
+| Dedicated AMD Radeon or Intel Arc | Monitor Windows readings. Optional ADLX and IGCL probes can help qualify device-wide dedicated memory. |
+| Integrated GPUs | Monitor available Windows readings. |
 
-1. **Open PowerShell under your normal Windows account.** Check that `nvidia-smi -L` lists your GPU and `docker ps` can reach Docker.
-2. **Choose a worker ID and container name.** This example uses `example-worker` for both. The ID must start with a lowercase letter and use only lowercase letters, digits, and hyphens (up to 48 characters). The container name must match the container that actually runs the GPU job.
-3. **Create the state folders.** Run the commands below from the repository root or the installed app folder, where `config.example.json` lives. Run this only for a fresh setup.
+AMD and Intel admission requires real hardware qualification. See [GPU qualification](native/README.md). Docker GPU compatibility must also be checked inside the container.
 
-```powershell
-$root = Join-Path $env:LOCALAPPDATA 'GpuAdmission'
-if (Test-Path "$root\bin\config.json") { throw 'Configuration already exists' }
-'bin', 'logs', 'public\grants', 'requests\example-worker' | ForEach-Object {
-    New-Item -ItemType Directory -Path (Join-Path $root $_) -Force | Out-Null
-}
-$config = Get-Content .\config.example.json -Raw | ConvertFrom-Json
-$config.root = $root
-$config | ConvertTo-Json -Depth 6 | Set-Content "$root\bin\config.json" -Encoding UTF8
-'{"policy_mode":"Hold","consumer_modes":{"example-worker":"Hold"}}' |
-    Set-Content "$root\modes.json" -Encoding UTF8
-```
+## Releases
 
-4. **Identify the GPU.** Copy the NVIDIA UUID from `nvidia-smi -L` into `gpu` in `bin\config.json`. While the target GPU is doing work, run the following in PowerShell to list Windows GPU Engine instance names. From a matching instance such as `pid_1234_luid_0x00000000_0x0001171a_phys_0_eng_0_engtype_3D`, use `0x00000000_0x0001171a` for `windows_engine_luid` and `0` for `windows_physical_index`. On a multi-GPU PC, match the Windows instance to a process using the intended GPU. Leave admission on Hold if you cannot confirm the pairing.
-
-```powershell
-(Get-Counter '\GPU Engine(*)\Utilization Percentage').CounterSamples |
-    Select-Object -ExpandProperty InstanceName -Unique
-```
-
-5. **Open GPU Admission.** Use the Start menu after installing, or run `.\out\GpuAdmissionTray.exe --status` from the source checkout. Check that the GPU readings appear. The two Hold settings pause all new jobs and this worker respectively. Both must be Auto to admit a new job.
-6. **Optional: start at sign-in.** Check **Start GPU Admission when I sign in** in the dashboard. It starts in the tray for your Windows account. If you already use a scheduled task for this app, choose one startup method.
-
-For a custom state directory, place its absolute path in `root.txt` next to the executable. Upgrading an existing install that uses `%ProgramData%\GpuAdmission`? Keep pointing `root.txt` to that directory so the ownership journal and worker mounts stay together.
-
-## Connect your own worker
-
-GPU Admission is a coordinator. Your worker needs to ask permission before starting its GPU process.
-
-1. **Mount two folders.** Give the worker read-only access to `public` and write access to its own `requests\example-worker` folder. For Docker, bind these to paths such as `/admission/read` and `/admission/request`. Give each worker its own request directory.
-2. **Request the GPU.** Read `/admission/read/status.json`. When status is fresh and both policies are Auto, write the request below to `/admission/request/<request_id>.json`. To update a request, write to a temporary file in the same directory and rename it over the original. Refresh both timestamps every five seconds while waiting or running.
-3. **Wait for the two-step grant.** Read `/admission/read/grants/example-worker.json`. After a matching `reserved` grant, change the request's `state` to `active`. Start the GPU process only once you receive a matching `active` grant and the latest status confirms the same request and both policies are still Auto.
-4. **Release when the GPU process exits.** Write `state: "released"` with fresh timestamps after confirming the GPU process has exited. If status or grants disappear, stop accepting new GPU work. An already admitted process can finish and release normally. If canceled before launch, release the reservation once you know no GPU process started.
-5. **Test before enabling real work.** Give the worker its own ID in `modes.json`, set its mode to Auto, then use **Resume** for the global switch. Test with a small job. Check that it waits while paused, starts only after the active grant, and releases after exit.
-
-Example request. Use a new random ID of 32 lowercase hexadecimal characters, copy `generation` and `gpu` from the current status, and use numeric Unix timestamps in seconds.
-
-```json
-{
-  "schema": "home-network-gpu-admission/v1",
-  "consumer": "example-worker",
-  "request_id": "0123456789abcdef0123456789abcdef",
-  "generation": "<from status.json>",
-  "gpu": "<from status.json>",
-  "state": "requested",
-  "observed_at": 0,
-  "heartbeat_at": 0,
-  "minimum_free_vram_mib": 4096
-}
-```
-
-For every grant check, verify the schema, consumer, request ID, GPU UUID, and generation. Both status and grant must be between 0 and 15 seconds old. The status for the active grant must identify the same consumer and request ID. Keep one in-flight request per worker and start the GPU job only once for that request.
-
-## Release policy
-
-- GitHub Actions builds a Windows installer and checksum as build artifacts. Pushing a tag does not publish them to Releases.
-- Publish only after the repository owner explicitly approves that release. Mark all approved releases as **prerelease** until the owner changes this policy.
+- GitHub Actions builds the app, installer, and checksum as workflow artifacts.
+- A GitHub Release needs the repository owner’s explicit approval. Approved releases are marked **prerelease**.
