@@ -73,13 +73,18 @@ jobs:
           $app = Join-Path $install 'GpuAdmissionTray.exe'
           $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'GPU Admission.lnk'
           if (!(Test-Path $app) -or !(Test-Path $shortcut)) { throw 'App or Start menu shortcut is missing' }
+          if (!(Test-Path (Join-Path $install 'LICENSE'))) { throw 'GPL license is missing' }
           if (!(Test-Path (Join-Path $install 'integrations/gpu_admission_client.py'))) { throw 'The worker client is missing' }
           $probe = Start-Process $app -Wait -PassThru -WindowStyle Hidden -ArgumentList '--probe-worker INVALID-ID'
           if ($probe.ExitCode -ne 2) { throw 'Installed launcher did not load its runtime' }
+      - name: Archive corresponding project source
+        shell: pwsh
+        run: git archive --format=zip --prefix=gpu-admission/ --output=dist/GPU-Admission-Source.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
           name: gpu-admission-windows-x64
           path: |
             dist/GPU-Admission-Setup-x64.exe
             dist/SHA256SUMS.txt
+            dist/GPU-Admission-Source.zip
           if-no-files-found: error

@@ -21,6 +21,7 @@ CloseApplications=no
 RestartApplications=no
 
 [Files]
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "root.txt"; Flags: recursesubdirs ignoreversion
 Source: "..\config.example.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion

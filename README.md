@@ -105,3 +105,9 @@ AMD and Intel admission requires real hardware qualification. See [GPU qualifica
 
 - GitHub Actions builds the app, installer, and checksum as workflow artifacts.
 - A GitHub Release needs the repository owner’s explicit approval. Approved releases are marked **prerelease**.
+
+## License
+
+GPU Admission is licensed under [GNU GPL version 3](LICENSE) (GPL-3.0-only).
+
+When publishing an installer, offer the complete Corresponding Source for the exact build alongside it at no additional charge. Include the project source, build and installer scripts, and any bundled covered code needed to build the distributed version. Build from the published source, preserve copyright and license notices, and check the licenses and source obligations for bundled third-party components before publishing. CI packages the project source alongside the installer. Keep matching source available wherever the installer is offered. [GPLv3, sections 4–6](https://spdx.org/licenses/GPL-3.0-only.html)
