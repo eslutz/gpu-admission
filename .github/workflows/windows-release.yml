@@ -15,6 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Lint Python
+        run: |
+          python3 -m pip install ruff==0.15.5
+          python3 -m ruff check integrations tests
       - name: Verify Linux worker protocol
         run: PYTHONPATH=integrations python3 -B -m unittest discover -s tests -p test_client.py -v
 
@@ -50,13 +54,36 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Test guard and publish Windows x64 app
+      - name: Lint PowerShell
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -Repository PSGallery
+          $securityRules = @(
+            'PSAvoidUsingInvokeExpression',
+            'PSAvoidUsingConvertToSecureStringWithPlainText',
+            'PSAvoidUsingPlainTextForPassword',
+            'PSAvoidUsingUsernameAndPasswordParams'
+          )
+          $scripts = git ls-files -- '*.ps1' '*.psm1'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $issues = foreach ($script in $scripts) {
+            Invoke-ScriptAnalyzer -Path $script | Where-Object {
+              $_.Severity -in 'Error', 'ParseError' -or $_.RuleName -in $securityRules
+            }
+          }
+          if ($issues) {
+            $issues | Format-Table ScriptName,Line,RuleName,Message -Wrap
+            throw 'PowerShell lint failed'
+          }
+      - name: Analyze, test and publish Windows x64 app
         shell: pwsh
         run: |
           & ./src/Test-GuardLifecycle.ps1
-          dotnet run --project tests/WindowsChecks.csproj -c Release
+          dotnet build tests/WindowsChecks.csproj -c Release -warnaserror -p:NuGetAudit=true -p:NuGetAuditMode=all
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained true -o out
+          dotnet run --project tests/WindowsChecks.csproj -c Release --no-build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained true -o out -warnaserror -p:NuGetAudit=true -p:NuGetAuditMode=all
       - name: Build installer
         shell: pwsh
         run: |
