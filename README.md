@@ -1,49 +1,57 @@
 # GPU Admission
 
-<img src="assets/GpuAdmission.png" alt="GPU Admission icon" width="64" />
+<img src="assets/GpuAdmission.png" alt="GPU Admission chip and lightning icon" width="64" />
 
-A Windows notification-area utility that coordinates GPU access between cooperating
-local workers. The dashboard shows GPU telemetry, workload policy, process CPU and
-memory, and diagnostics. Pause holds new admissions. Quit waits for the current
-owner to release before the guard exits.
+**Let background jobs share your GPU without getting in the way of what you're doing.**
 
-## Build
+## Why it exists
 
-Use Windows and the .NET 10 SDK. The executable requires the .NET 10 Windows Desktop
-Runtime. The guard uses Windows PowerShell, NVIDIA's `nvidia-smi`, Windows GPU Engine
-performance counters, and Docker CLI to confirm when a configured container has stopped.
+This started on a gaming PC that also ran Tdarr video transcodes and voicemail transcription. Both jobs could try to use the same GPU, even while someone was gaming.
+
+- **Keep the PC responsive.** New background work waits when the GPU is busy or telemetry is unavailable.
+- **Avoid overlap.** One participating worker gets permission at a time.
+- **Finish in-flight work.** You can hold new jobs without interrupting the current one.
+
+```mermaid
+flowchart LR
+    T["Tdarr"] -->|"Requests GPU"| G["GPU Admission"]
+    V["Transcription"] -->|"Requests GPU"| G
+    L["GPU load and free memory"] --> G
+    G -->|"One grant at a time"| W["Background job runs"]
+```
+
+## What you can do from the tray
+
+- **Status** shows GPU readings, workload modes, and CPU and memory usage.
+- **Pause / Resume** controls whether new jobs can start. Resume still follows GPU availability and each worker's settings.
+- **Quit** waits for the current worker to release the GPU, then closes the app.
+- **Open logs** opens the event history. Logs rotate daily or at 1 MiB and are kept for up to 30 days, with a 20 MiB total cap.
+
+## Build on Windows
+
+- **Build:** .NET 10 SDK.
+- **Run:** .NET 10 Windows Desktop Runtime, Windows PowerShell, NVIDIA's `nvidia-smi`, and Windows GPU Engine counters.
+- **Docker:** The guard uses the Docker CLI to confirm when a configured worker container has stopped.
 
 ```powershell
 dotnet publish src/GpuAdmissionTray.csproj -c Release --self-contained false -o out
 powershell -NoProfile -File src/Test-GuardLifecycle.ps1
 ```
 
-## Configure
+## Set up a worker
 
-Use an installation directory and a private state directory writable only by the
-account running the guard and the administrators responsible for the machine.
-The default state directory is `%ProgramData%\GpuAdmission`. To use a different
-private directory, put its absolute path in `root.txt` next to the executable.
-
-Create `bin`, `logs`, `public\grants`, and `requests\<consumer-id>` under the
-state directory. Copy `config.example.json` to `bin\config.json` and set the state
-directory, NVIDIA GPU UUID, Windows adapter LUID and index, and Docker container
-names. Create `modes.json` with the following initial settings.
+1. **Choose a private state folder.** The default is `%ProgramData%\GpuAdmission`. To change it, put the absolute path in `root.txt` next to the executable. Limit write access to the guard account and the administrators who manage the PC.
+2. **Create the folders.** Add `bin`, `logs`, `public\grants`, and `requests\<consumer-id>` for each worker.
+3. **Configure the GPU and containers.** Copy [the sample configuration](config.example.json) to `bin\config.json`. Set the state folder, NVIDIA GPU UUID, Windows adapter LUID and index, and Docker container names.
+4. **Start in Hold.** Create `modes.json` using the example below. Replace `example-worker` with your configured worker ID.
+5. **Open the dashboard.** Run `out\GpuAdmissionTray.exe --status` as the signed-in account with Docker access. Verify GPU readings and connect a compatible worker before enabling admission. For automatic startup, use one interactive, limited-user Task Scheduler task.
 
 ```json
 {"policy_mode":"Hold","consumer_modes":{"example-worker":"Hold"}}
 ```
 
-Run `out\GpuAdmissionTray.exe` as the signed-in account with the configured Docker
-access. Use one interactive, limited-user Task Scheduler task for startup at sign-in
-if desired. Keep Hold until you verify telemetry and connect a compatible worker.
+## Worker compatibility
 
-The versioned `home-network-gpu-admission/v1` file format is retained for existing
-integrations. Consumers read only the status and grant files and submit requests
-through their own request directories. They must cooperate with the grant and
-heartbeat rules, including the 15-second freshness window. Installing the tray
-alone does not pause or start an arbitrary application.
-
-Current and rotated JSONL logs are kept under `logs`, with a 30-day retention and
-20 MiB cap. The previous event log rotates daily or when it reaches 1 MiB.
-Run the executable with `--status` to open the dashboard from a shortcut or command line.
+- A compatible worker requests permission before starting GPU work. Installing the tray alone won't control other apps.
+- Workers read the shared status and their own grants, and write requests in their assigned directories.
+- The existing `home-network-gpu-admission/v1` protocol uses a 15-second freshness window for status and grants.
