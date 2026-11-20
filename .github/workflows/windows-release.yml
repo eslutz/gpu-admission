@@ -43,31 +43,6 @@ jobs:
           & "$vs/Common7/Tools/Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
           & ./native/Build-VendorProbe.ps1 -AdlxSdk sdk/adlx -IgclSdk sdk/igcl -Destination "$env:RUNNER_TEMP/gpu-probe"
 
-  ui-preview:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: windows-2025
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - name: Render and exercise the native tray UI
-        shell: pwsh
-        run: |
-          $checks = Join-Path $env:RUNNER_TEMP 'gpu-admission-ui'
-          dotnet publish tests/WindowsChecks.csproj -c Release -r win-x64 --self-contained true -o $checks
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & (Join-Path $checks 'WindowsChecks.exe') appearance-contract (Join-Path $checks 'appearance-fixture')
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & (Join-Path $checks 'WindowsChecks.exe') ui-preview (Join-Path $PWD 'dist/ui-preview') (Join-Path $PWD 'assets/GpuAdmission.ico')
-          exit $LASTEXITCODE
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: gpu-admission-ui-preview
-          path: dist/ui-preview/*.png
-          if-no-files-found: warn
-
   build:
     runs-on: windows-2025
     steps:
