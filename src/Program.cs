@@ -25,7 +25,14 @@ static class Program
             var portableRoot = Path.Combine(AppContext.BaseDirectory, "root.txt");
             string root = File.Exists(portableRoot)
                 ? Path.GetFullPath(File.ReadAllText(portableRoot).Trim())
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "GpuAdmission");
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GpuAdmission");
+            if (!File.Exists(Path.Combine(root, "bin", "config.json")))
+            {
+                if (showRequested)
+                    MessageBox.Show($"Create bin\\config.json under {root} first. See the setup steps in the README.",
+                        "GPU Admission setup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return 1;
+            }
             using var tray = new AdmissionTray(root, show);
             Application.Run(tray);
             return tray.ExitCode;

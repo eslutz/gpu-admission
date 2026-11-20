@@ -21,20 +21,21 @@ sealed class StatusWindow : Form
         Icon = appIcon;
         AutoScaleMode = AutoScaleMode.Dpi;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 470);
+        ClientSize = new Size(640, 510);
         MinimumSize = new Size(610, 500);
         BackColor = Background;
         ForeColor = Ink;
         Font = body;
 
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(22,16,22,16),
-            ColumnCount = 2, RowCount = 4 };
+            ColumnCount = 2, RowCount = 5 };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 51));
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         Controls.Add(grid);
 
         var hero = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
@@ -62,6 +63,22 @@ sealed class StatusWindow : Form
         quit = AddButton(actions, "Quit", quitAction);
         cancel = AddButton(actions, "Cancel quit", cancelAction);
         AddButton(actions, "Open logs", openLogs);
+        var startup = new CheckBox { Text = "Start GPU Admission when I sign in",
+            ForeColor = Ink, Dock = DockStyle.Fill, Checked = StartupPreference.Enabled };
+        startup.CheckedChanged += (_, _) =>
+        {
+            if (!startup.Enabled) return;
+            try { StartupPreference.Set(startup.Checked); }
+            catch (Exception error) when (error is UnauthorizedAccessException or
+                System.Security.SecurityException or IOException or InvalidOperationException)
+            {
+                startup.Enabled = false;
+                MessageBox.Show(this, error.Message, "Could not change startup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                startup.Checked = StartupPreference.Enabled;
+            }
+        };
+        grid.Controls.Add(startup, 0, 4);
+        grid.SetColumnSpan(startup, 2);
     }
 
     static Label TextLabel(string text, Font font, Color color) => new()
