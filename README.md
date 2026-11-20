@@ -107,3 +107,8 @@ Example request. Use a new random ID of 32 lowercase hexadecimal characters, cop
 ```
 
 For every grant check, verify the schema, consumer, request ID, GPU UUID, and generation. Both status and grant must be between 0 and 15 seconds old. The status for the active grant must identify the same consumer and request ID. Keep one in-flight request per worker and start the GPU job only once for that request.
+
+## Release policy
+
+- GitHub Actions builds a Windows installer and checksum as build artifacts. Pushing a tag does not publish them to Releases.
+- Publish only after the repository owner explicitly approves that release. Mark all approved releases as **prerelease** until the owner changes this policy.
