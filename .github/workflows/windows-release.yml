@@ -14,7 +14,7 @@ jobs:
   linux-client:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lint Python with Flake8
         run: |
           python3 -m pip install flake8==7.3.0
@@ -25,14 +25,14 @@ jobs:
   vendor-probe:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: GPUOpen-LibrariesAndSDKs/ADLX
           ref: 32b5a740d42295c5dfe9026b9f52683da0f3af91
           path: sdk/adlx
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: intel/drivers.gpu.control-library
           ref: 1db55c364b15649427a71a05d950ab9c1eaf9a07
@@ -50,8 +50,8 @@ jobs:
   build:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Lint PowerShell
@@ -113,7 +113,7 @@ jobs:
       - name: Archive corresponding project source
         shell: pwsh
         run: git archive --format=zip --prefix=gpu-admission/ --output=dist/GPU-Admission-Source.zip HEAD
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gpu-admission-windows-x64
           path: |
