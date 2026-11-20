@@ -68,14 +68,20 @@ sealed class WindowsJob : IDisposable
 
     public bool IsEmpty()
     {
-        if (process is { } handle && WaitForSingleObject(handle, 0) == 0)
+        if (lifetime.ActiveCount != 0) return false;
+        if (process is { } handle)
         {
-            if (!GetExitCodeProcess(handle, out uint code)) throw new Win32Exception();
+            // Job accounting can reach zero before Windows signals the root process.
+            const uint waitTimeout = 258;
+            uint waitResult = WaitForSingleObject(handle, 0);
+            if (waitResult == waitTimeout) return false;
+            if (waitResult != 0 || !GetExitCodeProcess(handle, out uint code))
+                throw new Win32Exception();
             ExitCode = unchecked((int)code);
             handle.Dispose();
             process = null;
         }
-        return lifetime.ActiveCount == 0;
+        return true;
     }
 
     public void Stop()

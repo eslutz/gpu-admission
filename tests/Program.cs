@@ -27,6 +27,10 @@ if (args is ["crash-workload", var crashMarker])
     Thread.Sleep(TimeSpan.FromMinutes(2));
     return;
 }
+if (args is ["exit-259"])
+{
+    Environment.Exit(259);
+}
 if (args is ["child", var childMarker])
 {
     Thread.Sleep(2500);
@@ -65,6 +69,12 @@ try
 {
     Directory.CreateDirectory(root);
     AppearanceChecks.Run(root);
+    using (var job = new WindowsJob(Environment.ProcessPath!, ["exit-259"]))
+    {
+        job.Start();
+        Wait(job.IsEmpty, "fast Windows job did not exit");
+        Assert(job.ExitCode == 259, "empty job must report the root process exit code");
+    }
     foreach (var directory in new[] { configDir, Path.Combine(published, "grants"), requests })
         AdmissionFiles.DirectoryFor(directory);
     var marker = Path.Combine(root, "a file with spaces");
