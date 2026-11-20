@@ -104,8 +104,8 @@ AMD and Intel admission requires real hardware qualification. See [GPU qualifica
 ## Releases
 
 1. Set `<Version>` in [the app project](src/GpuAdmissionTray.csproj), for example `0.2.0-preview.1`. The .NET build stamps the app with this version, and the installer uses the same value.
-2. Merge the version change into `main` and wait for **Windows installer** and **CodeQL** to pass. CI saves the installer, matching source ZIP, checksums, and build details.
-3. In **Actions → Publish release → Run workflow**, select `main`. Run this workflow only when you approve publication. It verifies the successful CI build and matching source before publishing. The workflow creates the matching `v` tag and publishes the installer and corresponding source together. A version such as `0.2.0-preview.1` publishes as a prerelease. A plain version such as `0.2.0` publishes as a regular release. Other SemVer prerelease suffixes also publish as prereleases.
+2. Merge the version change into `main` and wait for **Windows installer** and **CodeQL** to pass. CI saves the installer and `checksum-SHA256.txt`.
+3. In **Actions → Publish release → Run workflow**, select `main`. Run this workflow only when you approve publication. It verifies the installer checksum from the successful CI build for that commit. The workflow creates the matching `v` tag and publishes the installer and checksum. GitHub adds the corresponding source downloads from that tag. A version such as `0.2.0-preview.1` publishes as a prerelease. A plain version such as `0.2.0` publishes as a regular release. Other SemVer prerelease suffixes also publish as prereleases.
 
 A version can be published once. Increase the version in the app project for the next release. The current build is unsigned. Smart App Control may block it.
 
@@ -113,4 +113,4 @@ A version can be published once. Increase the version in the app project for the
 
 GPU Admission is licensed under [GNU GPL version 3](LICENSE) (GPL-3.0-only).
 
-When publishing an installer, offer the complete Corresponding Source for the exact build alongside it at no additional charge. Include the project source, build and installer scripts, and any bundled covered code needed to build the distributed version. Build from the published source, preserve copyright and license notices, and check the licenses and source obligations for bundled third-party components before publishing. CI packages the project source alongside the installer. Keep matching source available wherever the installer is offered. [GPLv3, sections 4–6](https://spdx.org/licenses/GPL-3.0-only.html)
+When publishing an installer, offer the complete Corresponding Source for the exact build alongside it at no additional charge. Include the project source, build and installer scripts, and any bundled covered code needed to build the distributed version. Build from the published source, preserve copyright and license notices, and check the licenses and source obligations for bundled third-party components before publishing. The release notes identify the built-in GitHub source archives as the corresponding source for the installer. Keep matching source available wherever the installer is offered. [GPLv3, sections 4–6](https://spdx.org/licenses/GPL-3.0-only.html)

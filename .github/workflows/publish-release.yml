@@ -56,16 +56,14 @@ jobs:
           fi
           gh run download "$run" --repo "$GITHUB_REPOSITORY" --name gpu-admission-windows-x64 --dir release
           cd release
-          grep -Fx "version=$version" BUILD.txt
-          grep -Fx "commit=$GITHUB_SHA" BUILD.txt
-          sha256sum --check SHA256SUMS.txt
+          sha256sum --check --strict checksum-SHA256.txt
           {
             echo "tag=$tag"
             echo "run=$run"
           } >> "$GITHUB_OUTPUT"
           kind=release
           if [[ "$tag" == *-* ]]; then kind=prerelease; fi
-          echo "Verified installer and source ZIP for $tag ($kind) at $GITHUB_SHA from CI run $run." >> "$GITHUB_STEP_SUMMARY"
+          echo "Verified installer and checksum for $tag ($kind) at $GITHUB_SHA from CI run $run." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: prepare
@@ -74,7 +72,7 @@ jobs:
       actions: read
       contents: write
     steps:
-      - name: Publish installer and corresponding source
+      - name: Publish installer and checksum
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
@@ -83,9 +81,7 @@ jobs:
           set -euo pipefail
           gh run download "$BUILD_RUN" --repo "$GITHUB_REPOSITORY" --name gpu-admission-windows-x64 --dir release
           cd release
-          grep -Fx "commit=$GITHUB_SHA" BUILD.txt
-          grep -Fx "version=${RELEASE_TAG#v}" BUILD.txt
-          sha256sum --check SHA256SUMS.txt
+          sha256sum --check --strict checksum-SHA256.txt
           existing=$(git ls-remote --refs "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$RELEASE_TAG")
           if [[ -z "$existing" ]]; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA" --silent
@@ -100,7 +96,6 @@ jobs:
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --verify-tag --title "GPU Admission $RELEASE_TAG" \
             "${release_flags[@]}" --generate-notes \
-            --notes 'The Windows installer and its corresponding GPLv3 source are available together below. See BUILD.txt for the exact version and commit.' \
+            --notes 'Use checksum-SHA256.txt to verify the Windows installer. The built-in Source code (zip) and Source code (tar.gz) downloads contain the corresponding GPLv3 source from this release tag.' \
             'GPU-Admission-Setup-x64.exe#Windows x64 installer' \
-            'GPU-Admission-Source.zip#Corresponding source (GPLv3)' \
-            SHA256SUMS.txt BUILD.txt
+            checksum-SHA256.txt

@@ -55,5 +55,5 @@ if(!(Test-Path -LiteralPath $compiler)) {
 if($LASTEXITCODE){exit $LASTEXITCODE}
 $binary=Join-Path $output 'GPU-Admission-Setup-x64.exe'
 $hash=(Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  GPU-Admission-Setup-x64.exe" | Set-Content -LiteralPath (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
-Write-Output "Built $binary and SHA256SUMS.txt"
+"$hash  GPU-Admission-Setup-x64.exe`n" | Set-Content -LiteralPath (Join-Path $output 'checksum-SHA256.txt') -Encoding ascii -NoNewline
+Write-Output "Built $binary and checksum-SHA256.txt"
