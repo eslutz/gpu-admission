@@ -1,0 +1,12 @@
+{
+  "root": "C:\\ProgramData\\GpuAdmission",
+  "gpu": "GPU-00000000-0000-0000-0000-000000000000",
+  "consumers": {
+    "example-worker": {
+      "container": "example-worker",
+      "minimum_free_vram_mib": 4096
+    }
+  },
+  "windows_engine_luid": "0x00000000_0x00000000",
+  "windows_physical_index": 0
+}

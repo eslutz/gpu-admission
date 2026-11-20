@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>../assets/GpuAdmission.ico</ApplicationIcon>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../assets/GpuAdmission.ico" LogicalName="GpuAdmission.ico" />
+    <None Update="*.ps1;*.psm1" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
