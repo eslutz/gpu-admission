@@ -1,10 +1,10 @@
-name: Publish prerelease
+name: Publish release
 
 on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Create the version tag and publish the prerelease
+        description: Create the version tag and publish the release
         type: boolean
         default: false
 
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: gpu-admission-prerelease
+  group: gpu-admission-release
   cancel-in-progress: false
 
 jobs:
@@ -68,7 +68,9 @@ jobs:
             echo "tag=$tag"
             echo "run=$run"
           } >> "$GITHUB_OUTPUT"
-          echo "Verified installer and source ZIP for $tag at $GITHUB_SHA from CI run $run." >> "$GITHUB_STEP_SUMMARY"
+          kind=release
+          if [[ "$tag" == *-* ]]; then kind=prerelease; fi
+          echo "Verified installer and source ZIP for $tag ($kind) at $GITHUB_SHA from CI run $run." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     if: inputs.publish
@@ -97,9 +99,13 @@ jobs:
             echo "The tag points to a different commit."
             exit 1
           fi
+          release_flags=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            release_flags=(--prerelease --latest=false)
+          fi
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --verify-tag --title "GPU Admission $RELEASE_TAG" \
-            --prerelease --latest=false --generate-notes \
+            "${release_flags[@]}" --generate-notes \
             --notes 'The Windows installer and its corresponding GPLv3 source are available together below. See BUILD.txt for the exact version and commit.' \
             'GPU-Admission-Setup-x64.exe#Windows x64 installer' \
             'GPU-Admission-Source.zip#Corresponding source (GPLv3)' \
