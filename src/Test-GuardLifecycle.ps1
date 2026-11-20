@@ -15,7 +15,7 @@ function Until($condition) {
     $timer=[Diagnostics.Stopwatch]::StartNew()
     while($timer.Elapsed.TotalSeconds -lt 25){
         if(& $condition){return}
-        if($child.HasExited){throw "Unexpected guard exit: $($child.StandardError.ReadToEnd())"}
+        if($child.HasExited){throw "Unexpected guard exit ($($child.ExitCode)) while waiting for $condition : $($child.StandardError.ReadToEnd())"}
         Start-Sleep -Milliseconds 150
     }
     throw "Timed out: $condition"

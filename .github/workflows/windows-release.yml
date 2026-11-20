@@ -21,8 +21,7 @@ jobs:
       - name: Test guard and publish Windows x64 app
         shell: pwsh
         run: |
-          powershell.exe -NoProfile -File src/Test-GuardLifecycle.ps1
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & ./src/Test-GuardLifecycle.ps1
           dotnet publish src/GpuAdmissionTray.csproj -c Release -r win-x64 --self-contained true -o out
       - name: Build installer
         shell: pwsh
